@@ -1,0 +1,32 @@
+{
+  "rgb_prediction_csv": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_rgb_predictions.csv",
+  "ir_prediction_csv": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_ir_predictions.csv",
+  "rgb_misclassified_counts": {
+    "bike": 90,
+    "bus": 130,
+    "car": 127,
+    "person": 76,
+    "sign": 66,
+    "motor": 74,
+    "light": 120,
+    "truck": 127
+  },
+  "ir_misclassified_counts": {
+    "bike": 36,
+    "bus": 436,
+    "car": 117,
+    "person": 41,
+    "sign": 90,
+    "motor": 16,
+    "light": 24,
+    "truck": 58
+  },
+  "rgb_misclassified_figure": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_rgb_misclassified_by_class.png",
+  "ir_misclassified_figure": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_ir_misclassified_by_class.png",
+  "rgb_correct_ir_wrong_count": 2,
+  "ir_correct_rgb_wrong_count": 3,
+  "rgb_correct_ir_wrong_figure": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_rgb_correct_ir_wrong.png",
+  "ir_correct_rgb_wrong_figure": "C:\\Users\\Tonito\\.vscode\\Final-Exam-CSE-547\\figures\\part5_ir_correct_rgb_wrong.png",
+  "rgb_val_acc": 0.9498016856717898,
+  "ir_val_acc": 0.926498337676341
+}

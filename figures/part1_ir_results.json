@@ -1,0 +1,46 @@
+[
+  {
+    "label": "Arch A",
+    "arch": "A",
+    "param_count": 880,
+    "best_epoch": 41,
+    "best_train_acc": 0.7663453027439535,
+    "best_val_acc": 0.7251325366160482,
+    "best_train_f1": 0.7168294064473647,
+    "best_val_f1": 0.652020154917567,
+    "train_time_min": 16.161981383959453
+  },
+  {
+    "label": "Arch B",
+    "arch": "B",
+    "param_count": 14600,
+    "best_epoch": 62,
+    "best_train_acc": 0.8701705700820555,
+    "best_val_acc": 0.8069907449007099,
+    "best_train_f1": 0.8506715335609194,
+    "best_val_f1": 0.756268691946732,
+    "train_time_min": 24.86242139339447
+  },
+  {
+    "label": "Arch C",
+    "arch": "C",
+    "param_count": 148200,
+    "best_epoch": 64,
+    "best_train_acc": 0.9552163823831966,
+    "best_val_acc": 0.861622787312427,
+    "best_train_f1": 0.9534517877088451,
+    "best_val_f1": 0.8340326144746157,
+    "train_time_min": 23.45616553227107
+  },
+  {
+    "label": "Arch D",
+    "arch": "D",
+    "param_count": 2459848,
+    "best_epoch": 9,
+    "best_train_acc": 0.9766273534125978,
+    "best_val_acc": 0.8879503998562315,
+    "best_train_f1": 0.9772111628827916,
+    "best_val_f1": 0.8791792535192049,
+    "train_time_min": 18.890918413798016
+  }
+]

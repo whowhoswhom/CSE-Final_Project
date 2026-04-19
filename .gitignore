@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+.claude/
+
+# Local/raw dataset artifacts. These are too large for normal GitHub and
+# contain machine-specific absolute paths in the generated manifests.
+data/
+train_rgb_patches/
+train_thermal_patches/
+rgb_full_frames/
+manifests/
+coco.json
+index.json
+patches_rgb_train_info.csv
+
+# Model checkpoints are generated artifacts. Keep them local unless using Git LFS.
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Logs and transient outputs
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
