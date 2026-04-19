@@ -20,6 +20,8 @@ Key completed outputs:
 - `REPORT2_VIDEO_OUTLINE.md` - concise outline for the required video walkthrough.
 - `figures/` - all plots, result JSON files, prediction CSVs, and error-analysis figures used by the report.
 - `report2_pipeline.py` - script version of the final notebook pipeline.
+- `FinalProject_Part2.pptx` - original Report 2 assignment prompt.
+- `CSE547_FinalProject_Report1_Fuentes.pdf` and `REPORT1_RESULTS_SUMMARY.md` - Part 1 baseline context.
 
 ## What To Submit
 
@@ -42,6 +44,10 @@ Recommended workflow:
 3. Use the figures in `figures/` if you need to rebuild or improve any page manually.
 4. Use `REPORT2_VIDEO_OUTLINE.md` to record the 10-minute video.
 5. Submit the PDF, notebook, and video link.
+
+Recommended Codex prompt on the laptop:
+
+> Use `FinalProject_Part2.pptx`, `CSE547_FinalProject_Report1_Fuentes.pdf`, `REPORT1_RESULTS_SUMMARY.md`, `CSE547_FinalProject_Report2_Fuentes.ipynb`, `CSE547_FinalProject_Report2_Fuentes.pdf`, `REPORT2_VIDEO_OUTLINE.md`, and the files in `figures/` as context. Review the generated Report 2 PDF for clarity, completeness, and alignment with the assignment. Improve the written report narrative if needed, but do not rerun model training unless a required artifact is missing.
 
 ## Reproducibility Notes
 
