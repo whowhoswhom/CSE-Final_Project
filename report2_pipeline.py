@@ -25,9 +25,10 @@ import random
 import sys
 import textwrap
 import time
+from collections.abc import Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import matplotlib
 
@@ -80,6 +81,19 @@ CLASSES = {
 }
 ID_TO_CLASS = {v: k for k, v in CLASSES.items()}
 NUM_CLASSES = len(CLASSES)
+
+
+def loader_dataset_len(loader: DataLoader) -> int:
+    return len(cast(Sized, loader.dataset))
+
+
+def make_grad_scaler(enabled: bool) -> Any:
+    scaler_cls = getattr(torch.amp, "GradScaler")
+    return scaler_cls("cuda", enabled=enabled)
+
+
+def row_to_str_dict(row: Any) -> dict[str, Any]:
+    return {str(k): v for k, v in row.to_dict().items()}
 
 RGB_PART1_BASELINE = {
     "label": "RGB Part 1 Arch D",
@@ -222,7 +236,8 @@ class ManifestImageDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
         with Image.open(self.paths[idx]) as src:
             img = src.convert("RGB")
-        return self.transform(img), self.labels[idx]
+        transformed = self.transform(img)
+        return cast(torch.Tensor, transformed), self.labels[idx]
 
 
 def worker_init(_: int) -> None:
@@ -345,7 +360,7 @@ def evaluate_classifier(
             preds_all.extend(logits.argmax(1).detach().cpu().tolist())
             labels_all.extend(labels.detach().cpu().tolist())
     acc, f1 = accuracy_f1(labels_all, preds_all)
-    return running_loss / len(loader.dataset), acc, f1
+    return running_loss / loader_dataset_len(loader), acc, f1
 
 
 def train_image_classifier(
@@ -363,7 +378,7 @@ def train_image_classifier(
 ) -> dict[str, Any]:
     model = model.to(DEVICE)
     amp_device, amp_dtype, amp_enabled = amp_context()
-    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
+    scaler = make_grad_scaler(amp_enabled)
     criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE) if class_weights is not None else None)
     optimizer = torch.optim.Adam(param_groups if param_groups is not None else model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=3)
@@ -400,7 +415,7 @@ def train_image_classifier(
             labels_all.extend(labels.detach().cpu().tolist())
         train_acc, train_f1 = accuracy_f1(labels_all, preds_all)
         val_loss, val_acc, val_f1 = evaluate_classifier(model, val_loader, criterion)
-        train_loss = running / len(train_loader.dataset)
+        train_loss = running / loader_dataset_len(train_loader)
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
         history["train_acc"].append(train_acc)
@@ -522,7 +537,7 @@ class VGG16Transfer(nn.Module):
         super().__init__()
         weights = tv_models.VGG16_Weights.IMAGENET1K_V1
         vgg = tv_models.vgg16(weights=weights)
-        self.features = vgg.features
+        self.features = cast(nn.Sequential, vgg.features)
         self._apply_freeze(freeze_level)
         self.classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
@@ -635,7 +650,7 @@ def train_autoencoder(
 ) -> dict[str, Any]:
     model = model.to(DEVICE)
     amp_device, amp_dtype, amp_enabled = amp_context()
-    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
+    scaler = make_grad_scaler(amp_enabled)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3)
@@ -657,7 +672,7 @@ def train_autoencoder(
             scaler.step(optimizer)
             scaler.update()
             running += float(loss.item()) * images.size(0)
-        train_loss = running / len(train_loader.dataset)
+        train_loss = running / loader_dataset_len(train_loader)
         val_loss = evaluate_autoencoder(model, val_loader, criterion)
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
@@ -695,7 +710,7 @@ def evaluate_autoencoder(model: ConvAutoEncoder, loader: DataLoader, criterion: 
                 recon = model(images)
                 loss = criterion(recon, images)
             running += float(loss.item()) * images.size(0)
-    return running / len(loader.dataset)
+    return running / loader_dataset_len(loader)
 
 
 def extract_features(ae: ConvAutoEncoder, loader: DataLoader) -> tuple[torch.Tensor, torch.Tensor]:
@@ -809,7 +824,7 @@ def evaluate_feature_classifier(model: nn.Module, loader: DataLoader, criterion:
             preds_all.extend(logits.argmax(1).cpu().tolist())
             labels_all.extend(labels.cpu().tolist())
     acc, f1 = accuracy_f1(labels_all, preds_all)
-    return running / len(loader.dataset), acc, f1
+    return running / loader_dataset_len(loader), acc, f1
 
 
 def predict_feature_classifier(model: nn.Module, features: torch.Tensor, labels: torch.Tensor, val_df: pd.DataFrame, batch_size: int = 2048) -> pd.DataFrame:
@@ -1284,7 +1299,7 @@ def select_misclassified_items(pred_df: pd.DataFrame, n_per_class: int = 2) -> t
         counts[class_name] = len(misses)
         misses = misses.sort_values("confidence", ascending=False).head(n_per_class)
         for _, row in misses.iterrows():
-            items.append(row.to_dict())
+            items.append(row_to_str_dict(row))
     return items, counts
 
 
@@ -1328,7 +1343,7 @@ def find_sensor_pairs(rgb_pred: pd.DataFrame, ir_pred: pd.DataFrame, want_rgb_co
                 & (ir_pred["correct"] != want_rgb_correct)
             ]
             if len(rgb_rows) and len(ir_rows):
-                found = {"rgb": rgb_rows.iloc[0].to_dict(), "ir": ir_rows.iloc[0].to_dict(), "class_name": class_name, "match": "same class/frame"}
+                found = {"rgb": row_to_str_dict(rgb_rows.iloc[0]), "ir": row_to_str_dict(ir_rows.iloc[0]), "class_name": class_name, "match": "same class/frame"}
                 break
         if found:
             out.append(found)
@@ -1351,7 +1366,7 @@ def find_sensor_pairs(rgb_pred: pd.DataFrame, ir_pred: pd.DataFrame, want_rgb_co
             & (ir_pred["correct"] != want_rgb_correct)
         ]
         if len(rgb_rows) and len(ir_rows):
-            out.append({"rgb": rgb_rows.iloc[0].to_dict(), "ir": ir_rows.iloc[0].to_dict(), "class_name": "scene", "match": "same paired frame"})
+            out.append({"rgb": row_to_str_dict(rgb_rows.iloc[0]), "ir": row_to_str_dict(ir_rows.iloc[0]), "class_name": "scene", "match": "same paired frame"})
         if len(out) >= 4:
             break
     return out
@@ -1596,6 +1611,13 @@ def write_final_notebook() -> None:
         return
     source = Path(__file__).read_text(encoding="utf-8")
     source_without_cli = source.split("\ndef parse_args(", 1)[0]
+    # The implementation cell is generated as one large source block, so disable
+    # notebook-only static diagnostics while preserving executable code.
+    notebook_type_header = (
+        "# pyright: typeCheckingMode=off\n"
+        "# pyright: reportArgumentType=false, reportPrivateImportUsage=false, "
+        "reportIndexIssue=false, reportReturnType=false, reportAttributeAccessIssue=false\n"
+    )
     cells = [
         {
             "cell_type": "markdown",
@@ -1623,7 +1645,7 @@ def write_final_notebook() -> None:
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": source_without_cli.splitlines(keepends=True),
+            "source": (notebook_type_header + source_without_cli).splitlines(keepends=True),
         },
         {
             "cell_type": "markdown",
@@ -1636,9 +1658,165 @@ def write_final_notebook() -> None:
             "metadata": {},
             "outputs": [],
             "source": [
-                "outputs = run_all(reuse_checkpoints=REUSE_CHECKPOINTS, smoke_test=SMOKE_TEST)\n",
-                "outputs\n",
+                "import contextlib\n",
+                "import io\n",
+                "\n",
+                "_pipeline_log = io.StringIO()\n",
+                "with contextlib.redirect_stdout(_pipeline_log):\n",
+                "    outputs = run_all(reuse_checkpoints=REUSE_CHECKPOINTS, smoke_test=SMOKE_TEST)\n",
+                "\n",
+                "outputs[\"missing\"]\n",
             ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Part 3: RGB VGG16 Transfer Learning Results\n",
+                "\n",
+                "This section loads the cached Part 3 results and displays the transfer-learning comparison across VGG16 freezing strategies.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "from IPython.display import Image, display\n",
+                "\n",
+                "part3 = read_json(FIGURES_DIR / \"part3_rgb_vgg16_results.json\")\n",
+                "part3_table = pd.DataFrame([\n",
+                "    {\n",
+                "        \"Freeze Setting\": r[\"label\"],\n",
+                "        \"Description\": r.get(\"description\", \"\"),\n",
+                "        \"Best Epoch\": r[\"best_epoch\"],\n",
+                "        \"Train Acc\": round(r[\"best_train_acc\"], 4),\n",
+                "        \"Val Acc\": round(r[\"best_val_acc\"], 4),\n",
+                "        \"Train F1\": round(r[\"best_train_f1\"], 4),\n",
+                "        \"Val F1\": round(r[\"best_val_f1\"], 4),\n",
+                "    }\n",
+                "    for r in part3\n",
+                "])\n",
+                "display(part3_table)\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part3_rgb_vgg16_freeze.png\")))\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Part 4: IR Convolutional Autoencoder Results\n",
+                "\n",
+                "This section compares the 12 autoencoder-feature classifier options used for the infrared modality.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "part4 = read_json(FIGURES_DIR / \"part4_ir_ae_results.json\")\n",
+                "part4_table = pd.DataFrame([\n",
+                "    {\n",
+                "        \"AE Option\": r[\"label\"],\n",
+                "        \"Filters\": str(r.get(\"filters\", \"\")),\n",
+                "        \"Bottleneck\": r.get(\"bottleneck_dim\", \"\"),\n",
+                "        \"Dropout\": r.get(\"dropout\", \"\"),\n",
+                "        \"Weight Decay\": r.get(\"weight_decay\", \"\"),\n",
+                "        \"Best Epoch\": r[\"best_epoch\"],\n",
+                "        \"Train Acc\": round(r[\"best_train_acc\"], 4),\n",
+                "        \"Val Acc\": round(r[\"best_val_acc\"], 4),\n",
+                "        \"Train F1\": round(r[\"best_train_f1\"], 4),\n",
+                "        \"Val F1\": round(r[\"best_val_f1\"], 4),\n",
+                "    }\n",
+                "    for r in part4\n",
+                "])\n",
+                "display(part4_table)\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part4_ir_autoencoder_12_options.png\")))\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Part 5: Error Analysis and RGB-vs-IR Sensor Comparison\n",
+                "\n",
+                "This section displays the per-class misclassification counts and the generated qualitative comparison figures.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "part5 = read_json(FIGURES_DIR / \"part5_analysis_summary.json\")\n",
+                "counts_table = pd.DataFrame({\n",
+                "    \"Class\": list(part5[\"rgb_misclassified_counts\"].keys()),\n",
+                "    \"RGB Misclassified\": list(part5[\"rgb_misclassified_counts\"].values()),\n",
+                "    \"IR Misclassified\": [part5[\"ir_misclassified_counts\"][k] for k in part5[\"rgb_misclassified_counts\"].keys()],\n",
+                "})\n",
+                "summary_table = pd.DataFrame([\n",
+                "    {\"Metric\": \"RGB validation accuracy\", \"Value\": round(part5[\"rgb_val_acc\"], 4)},\n",
+                "    {\"Metric\": \"IR validation accuracy\", \"Value\": round(part5[\"ir_val_acc\"], 4)},\n",
+                "    {\"Metric\": \"RGB correct / IR wrong paired scenes\", \"Value\": part5[\"rgb_correct_ir_wrong_count\"]},\n",
+                "    {\"Metric\": \"IR correct / RGB wrong paired scenes\", \"Value\": part5[\"ir_correct_rgb_wrong_count\"]},\n",
+                "])\n",
+                "display(summary_table)\n",
+                "display(counts_table)\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part5_rgb_misclassified_by_class.png\")))\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part5_ir_misclassified_by_class.png\")))\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part5_rgb_correct_ir_wrong.png\")))\n",
+                "display(Image(filename=str(FIGURES_DIR / \"part5_ir_correct_rgb_wrong.png\")))\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Part 6: Final Model Selection\n",
+                "\n",
+                "Final models are selected by validation weighted F1. The hidden blind-test labels are not used for model selection.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "selection = read_json(FIGURES_DIR / \"report2_final_model_selection.json\")\n",
+                "final_rows = []\n",
+                "for modality, result in [(\"RGB\", selection[\"final_rgb\"]), (\"IR\", selection[\"final_ir\"])]:\n",
+                "    final_rows.append({\n",
+                "        \"Modality\": modality,\n",
+                "        \"Final Model\": result[\"label\"],\n",
+                "        \"Val Acc\": round(result[\"best_val_acc\"], 4),\n",
+                "        \"Val F1\": round(result[\"best_val_f1\"], 4),\n",
+                "        \"Selection Basis\": \"highest validation weighted F1\",\n",
+                "    })\n",
+                "display(pd.DataFrame(final_rows))\n",
+                "if selection.get(\"notes\"):\n",
+                "    display(pd.DataFrame({\"Notes\": selection[\"notes\"]}))\n",
+            ],
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Final Artifact Verification\n",
+                "\n",
+                "The empty list below means the notebook found all required generated artifacts.\n",
+            ],
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["outputs[\"missing\"]\n"],
         },
     ]
     nb = {

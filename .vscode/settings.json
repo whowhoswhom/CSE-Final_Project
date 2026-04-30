@@ -1,0 +1,10 @@
+{
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportArgumentType": "none",
+    "reportAttributeAccessIssue": "none",
+    "reportIndexIssue": "none",
+    "reportPrivateImportUsage": "none",
+    "reportReturnType": "none"
+  }
+}
